@@ -20,8 +20,11 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.execute(
         """
-        CREATE TABLE sessions (
+        CREATE TABLE session (
             id UUID NOT NULL,
+            user_agent VARCHAR(1024) NOT NULL,
+            accuracy SMALLINT NOT NULL CHECK (accuracy BETWEEN 0 AND 100),
+            sample_rate INTEGER NOT NULL,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             PRIMARY KEY (id)
         )
@@ -30,20 +33,20 @@ def upgrade() -> None:
 
     op.execute(
         """
-        CREATE TABLE samples (
+        CREATE TABLE sample (
             session_id UUID NOT NULL,
             timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
             pos DOUBLE PRECISION NOT NULL,
             PRIMARY KEY (session_id, timestamp),
-            FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            FOREIGN KEY (session_id) REFERENCES session(id) ON DELETE CASCADE
         )
     """
     )
 
     op.execute(
         """
-        CREATE INDEX idx_samples_session_time_desc 
-        ON samples (session_id, timestamp DESC)
+        CREATE INDEX idx_samples_session_time_desc
+        ON sample (session_id, timestamp DESC)
     """
     )
 
@@ -51,5 +54,5 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     op.execute("DROP INDEX idx_samples_session_time_desc")
-    op.execute("DROP TABLE samples")
-    op.execute("DROP TABLE sessions")
+    op.execute("DROP TABLE sample")
+    op.execute("DROP TABLE session")
