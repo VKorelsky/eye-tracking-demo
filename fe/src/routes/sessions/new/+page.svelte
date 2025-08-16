@@ -63,32 +63,34 @@
 	function drawCalibrationPoints() {
 		if (!ctx) return;
 
-		calibrationPoints.forEach((point) => {
-			const x = (point.x / 100) * canvas.width;
-			const y = (point.y / 100) * canvas.height;
+		// Find the first non-completed point
+		const activePoint = calibrationPoints.find(p => !p.completed);
+		if (!activePoint) return;
 
-			ctx!.beginPath();
-			ctx!.arc(x, y, 20, 0, 2 * Math.PI);
+		const x = (activePoint.x / 100) * canvas.width;
+		const y = (activePoint.y / 100) * canvas.height;
 
-			if (point.completed) {
-				ctx!.fillStyle = '#10B981'; // Green
-			} else if (point.clicks >= 1) {
-				ctx!.fillStyle = '#F59E0B'; // Yellow
-			} else {
-				ctx!.fillStyle = '#EF4444'; // Red
-			}
+		ctx!.beginPath();
+		ctx!.arc(x, y, 20, 0, 2 * Math.PI);
 
-			ctx!.fill();
-			ctx!.strokeStyle = '#374151';
-			ctx!.lineWidth = 2;
-			ctx!.stroke();
+		if (activePoint.clicks >= 4) {
+			ctx!.fillStyle = '#F59E0B'; // Yellow (almost done)
+		} else if (activePoint.clicks >= 1) {
+			ctx!.fillStyle = '#FCA5A5'; // Light red (progress)
+		} else {
+			ctx!.fillStyle = '#EF4444'; // Red (start)
+		}
 
-			// Draw click count
-			ctx!.fillStyle = '#FFFFFF';
-			ctx!.font = '14px monospace';
-			ctx!.textAlign = 'center';
-			ctx!.fillText(`${point.clicks}/2`, x, y + 5);
-		});
+		ctx!.fill();
+		ctx!.strokeStyle = '#374151';
+		ctx!.lineWidth = 2;
+		ctx!.stroke();
+
+		// Draw click count
+		ctx!.fillStyle = '#FFFFFF';
+		ctx!.font = '14px monospace';
+		ctx!.textAlign = 'center';
+		ctx!.fillText(`${activePoint.clicks}/5`, x, y + 5);
 	}
 
 	function drawMovingDot() {
@@ -145,24 +147,25 @@
 		const clickXPercent = (canvasX / canvas.offsetWidth) * 100;
 		const clickYPercent = (canvasY / canvas.offsetHeight) * 100;
 
-		// Find clicked calibration point (within 10% tolerance)
-		for (let i = 0; i < calibrationPoints.length; i++) {
-			const point = calibrationPoints[i];
-			if (
-				!point.completed &&
-				Math.abs(clickXPercent - point.x) < 10 &&
-				Math.abs(clickYPercent - point.y) < 10
-			) {
-				// Record screen position for WebGazer
-				webgazer.recordScreenPosition(event.clientX, event.clientY, 'click');
+		// Find the currently active point (first non-completed)
+		const activePointIndex = calibrationPoints.findIndex(p => !p.completed);
+		if (activePointIndex === -1) return; // All points completed
 
-				point.clicks++;
-				if (point.clicks >= 2) {
-					point.completed = true;
-				}
-				calibrationPoints[i] = point;
-				break;
+		const activePoint = calibrationPoints[activePointIndex];
+		
+		// Check if click is within tolerance of active point
+		if (
+			Math.abs(clickXPercent - activePoint.x) < 10 &&
+			Math.abs(clickYPercent - activePoint.y) < 10
+		) {
+			// Add data point to web gazer training
+			webgazer.recordScreenPosition(event.clientX, event.clientY, 'click');
+
+			activePoint.clicks++;
+			if (activePoint.clicks >= 5) {
+				activePoint.completed = true;
 			}
+			calibrationPoints[activePointIndex] = activePoint;
 		}
 
 		// Check if all points are calibrated
@@ -174,7 +177,7 @@
 	function startExercise() {
 		appState = 'exercise';
 		exerciseStartTime = performance.now();
-		webgazer.setGazeListener(gazeListenerCallback);
+		webgazer.removeMouseEventListeners().setGazeListener(gazeListenerCallback);
 		startTimer();
 		startDotAnimation();
 	}
@@ -249,7 +252,7 @@
 
 			{#if appState === 'calibration'}
 				<div class="mb-4 text-lg font-medium text-gray-700">
-					Calibration: Click each red circle twice
+					Calibration: Click the red circle 5 times
 				</div>
 			{/if}
 
