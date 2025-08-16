@@ -5,7 +5,7 @@ router = APIRouter(tags=["sessions"])
 
 @router.post("/sessions")
 async def create_session(session_data: Dict[str, Any]):
-    return "session created"
+    return "persisting session"
 
 
 @router.get("/sessions")
