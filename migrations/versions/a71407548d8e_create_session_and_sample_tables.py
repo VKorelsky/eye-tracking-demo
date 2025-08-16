@@ -1,0 +1,55 @@
+"""create session and sample tables
+
+Revision ID: a71407548d8e
+Revises:
+Create Date: 2025-08-16 19:15:43.897096
+"""
+
+from typing import Sequence, Union
+
+from alembic import op
+
+
+# revision identifiers, used by Alembic.
+revision: str = "a71407548d8e"
+down_revision: Union[str, Sequence[str], None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    op.execute(
+        """
+        CREATE TABLE sessions (
+            id UUID NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (id)
+        )
+    """
+    )
+
+    op.execute(
+        """
+        CREATE TABLE samples (
+            session_id UUID NOT NULL,
+            timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+            pos DOUBLE PRECISION NOT NULL,
+            PRIMARY KEY (session_id, timestamp),
+            FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        )
+    """
+    )
+
+    op.execute(
+        """
+        CREATE INDEX idx_samples_session_time_desc 
+        ON samples (session_id, timestamp DESC)
+    """
+    )
+
+
+def downgrade() -> None:
+    """Downgrade schema."""
+    op.execute("DROP INDEX idx_samples_session_time_desc")
+    op.execute("DROP TABLE samples")
+    op.execute("DROP TABLE sessions")

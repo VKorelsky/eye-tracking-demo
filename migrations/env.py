@@ -1,9 +1,15 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import create_engine
 
 from alembic import context
+from dotenv import load_dotenv
+
+import re
+import os
+
+# Load environment variables from .env file
+load_dotenv()
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -55,17 +61,26 @@ def run_migrations_online() -> None:
 
     In this scenario we need to create an Engine
     and associate a connection with the context.
-
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    url_tokens = {
+        "DB_USER": os.getenv("DB_USER", ""),
+        "DB_PASS": os.getenv("DB_PASS", ""),
+        "DB_HOST": os.getenv("DB_HOST", ""),
+        "DB_NAME": os.getenv("DB_NAME", ""),
+    }
+
+    url = config.get_main_option("sqlalchemy.url")
+    # replace placeholders in the ini config file with their values
+    url = re.sub(r"\${(.+?)}", lambda m: url_tokens[m.group(1)], url)
+
+    connectable = create_engine(url)
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            compare_server_default=True,
         )
 
         with context.begin_transaction():
