@@ -2,15 +2,28 @@
 	import { onMount } from 'svelte';
 	import webgazer, { type GazeData, type GazeListener } from 'webgazer';
 
+	// const normalize = (gazeX: number, canvasLeft: number, canvasWidth: number): number => {
+	// 	const canvasRelativeX = gazeX - canvasLeft;
+	// 	const normalizedPos = (canvasRelativeX / canvasWidth) * 2 - 1;
+	// 	return Math.max(-1, Math.min(1, normalizedPos));
+	// };
+
+	// do this processing prior to uploading to server
+	// const rect = canvas.getBoundingClientRect();
+	// const pos = normalize(data.x, rect.left, canvas.offsetWidth);
+	// const sample_time = exerciseStartTime + elapsedTimeMs;
+
+	// const sample: GazeDataPoint = { pos, sample_time };
+	// sessionData.push(sample);
+
 	type AppState = 'ready' | 'calibration' | 'exercise' | 'completed';
 	let appState: AppState = $state('ready');
-	let sessionId: string = $state('');
 
 	let exerciseStartTime: number = $state(0);
-	let timeRemaining: number = $state(30);
+	let timeRemaining: number = $state(10);
 
-	type GazeDataPoint = { pos: number; sample_time: number };
-	let sessionData = $state<GazeDataPoint[]>([]);
+	type RecordingSample = GazeData & { elapsedMs: number };
+	let sessionData = $state<RecordingSample[]>([]);
 
 	// TODO -> move these into separate components
 	// Calibration state
@@ -33,28 +46,20 @@
 
 	// Exercise state
 	let dotX: number = $state(10); // percentage of canvas width
-	let animationId: number;
 	let timerInterval: ReturnType<typeof setInterval>;
 
 	onMount(() => {
-		sessionId = crypto.randomUUID();
-
 		ctx = canvas.getContext('2d');
-		// smooth predictions
-		webgazer.applyKalmanFilter(true);
 		drawCanvas();
 	});
 
 	function drawCanvas() {
 		if (!ctx) return;
 
-		// Clear canvas
 		ctx!.clearRect(0, 0, canvas.width, canvas.height);
 
 		if (appState === 'calibration') {
 			drawCalibrationPoints();
-		} else if (appState === 'exercise') {
-			drawMovingDot();
 		}
 
 		requestAnimationFrame(drawCanvas);
@@ -64,7 +69,7 @@
 		if (!ctx) return;
 
 		// Find the first non-completed point
-		const activePoint = calibrationPoints.find(p => !p.completed);
+		const activePoint = calibrationPoints.find((p) => !p.completed);
 		if (!activePoint) return;
 
 		const x = (activePoint.x / 100) * canvas.width;
@@ -93,46 +98,17 @@
 		ctx!.fillText(`${activePoint.clicks}/5`, x, y + 5);
 	}
 
-	function drawMovingDot() {
-		if (!ctx) return;
-
-		const x = (dotX / 100) * canvas.width;
-		const y = canvas.height / 2;
-
-		ctx!.beginPath();
-		ctx!.arc(x, y, 15, 0, 2 * Math.PI);
-		ctx!.fillStyle = '#3B82F6'; // Blue
-		ctx!.fill();
-		ctx!.strokeStyle = '#1E40AF';
-		ctx!.lineWidth = 3;
-		ctx!.stroke();
-	}
-
-	const normalize = (
-		gazeX: number,
-		canvasLeft: number,
-		canvasWidth: number
-	): number => {
-		const canvasRelativeX = gazeX - canvasLeft;
-		const normalizedPos = (canvasRelativeX / canvasWidth) * 2 - 1;
-		return Math.max(-1, Math.min(1, normalizedPos));
-	};
-
 	const gazeListenerCallback: GazeListener = (data, elapsedTimeMs) => {
-		if (data == null || appState !== 'exercise') {
-			return;
+		if (data && appState === 'exercise') {
+			sessionData.push({ x: data.x, y: data.y, elapsedMs: elapsedTimeMs });
 		}
-
-		const rect = canvas.getBoundingClientRect();
-		const pos = normalize(data.x, rect.left, canvas.offsetWidth);
-		const sample_time = exerciseStartTime + elapsedTimeMs;
-
-		const sample: GazeDataPoint = { pos, sample_time };
-		sessionData.push(sample);
 	};
 
 	function startCalibration() {
 		appState = 'calibration';
+
+		webgazer.params.moveTickSize = 5;
+		webgazer.params.dataTimestep = 5;
 		webgazer.showPredictionPoints(true).begin();
 	}
 
@@ -148,11 +124,11 @@
 		const clickYPercent = (canvasY / canvas.offsetHeight) * 100;
 
 		// Find the currently active point (first non-completed)
-		const activePointIndex = calibrationPoints.findIndex(p => !p.completed);
+		const activePointIndex = calibrationPoints.findIndex((p) => !p.completed);
 		if (activePointIndex === -1) return; // All points completed
 
 		const activePoint = calibrationPoints[activePointIndex];
-		
+
 		// Check if click is within tolerance of active point
 		if (
 			Math.abs(clickXPercent - activePoint.x) < 10 &&
@@ -174,14 +150,6 @@
 		}
 	}
 
-	function startExercise() {
-		appState = 'exercise';
-		exerciseStartTime = performance.now();
-		webgazer.removeMouseEventListeners().setGazeListener(gazeListenerCallback);
-		startTimer();
-		startDotAnimation();
-	}
-
 	function startTimer() {
 		timerInterval = setInterval(() => {
 			timeRemaining--;
@@ -191,33 +159,18 @@
 		}, 1000);
 	}
 
-	function startDotAnimation() {
-		const animate = () => {
-			if (appState !== 'exercise') return;
-
-			// Move dot from 10% to 90% and back over 45 seconds
-			const elapsed = (performance.now() - exerciseStartTime) / 1000;
-			const progress = elapsed / 45;
-
-			if (progress <= 0.5) {
-				// First half: left to right
-				dotX = 10 + progress * 2 * 80;
-			} else {
-				// Second half: right to left
-				dotX = 90 - (progress - 0.5) * 2 * 80;
-			}
-
-			animationId = requestAnimationFrame(animate);
-		};
-		animate();
-	}
-
 	function endExercise() {
 		appState = 'completed';
 		clearInterval(timerInterval);
-		cancelAnimationFrame(animationId);
 		webgazer.end();
 		console.log('Session completed. Normalized gaze data:', sessionData);
+	}
+
+	function startExercise() {
+		appState = 'exercise';
+		exerciseStartTime = performance.now();
+		webgazer.removeMouseEventListeners().setGazeListener(gazeListenerCallback);
+		startTimer();
 	}
 
 	function resetSession() {
@@ -236,8 +189,6 @@
 	<div class="m-8 text-center">
 		<h1 class="text-2xl font-bold text-gray-900">New Session</h1>
 		<p class="mt-2 text-sm text-gray-600">
-			Session ID: <span class="font-mono text-blue-600">{sessionId}</span>
-			<br />
 			State: <span class="font-mono text-blue-600">{appState}</span>
 		</p>
 	</div>
@@ -274,7 +225,9 @@
 			{:else if appState === 'completed'}
 				<div class="space-y-4 text-center">
 					<div class="text-xl font-bold text-green-600">Session Completed!</div>
-					<div class="text-gray-600">Collected {sessionData.length} gaze points</div>
+					<div class="text-gray-600">
+						Collected {sessionData.length} gaze points over {10} seconds
+					</div>
 					<button
 						onclick={resetSession}
 						class="rounded-lg bg-gray-500 px-6 py-3 font-medium text-white transition-colors hover:bg-gray-600"
