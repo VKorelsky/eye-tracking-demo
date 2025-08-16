@@ -1,10 +1,14 @@
 from fastapi import APIRouter
 from typing import Any, Dict
 
+from app.deps import SessionDep
+from app.models import SessionBase
+
 router = APIRouter(tags=["sessions"])
 
+
 @router.post("/sessions")
-async def create_session(session_data: Dict[str, Any]):
+async def create_session(db_session: SessionDep, data: SessionBase):
     return "persisting session"
 
 
