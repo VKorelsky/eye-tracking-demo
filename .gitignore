@@ -1,0 +1,27 @@
+# frontend
+node_modules
+
+.output
+.vercel
+.netlify
+.wrangler
+.svelte-kit
+/build
+
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# backend
+__pycache__
+.venv
+dist/
+
+# common
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test

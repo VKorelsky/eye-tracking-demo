@@ -1,0 +1,15 @@
+[project]
+name = "aeon-eye-tracking"
+version = "0.1.0"
+description = "Eye tracking application with WebGazer.js and FastAPI backend"
+authors = [
+    {name = "Developer", email = "dev@example.com"},
+]
+dependencies = [
+    "fastapi[standard]>=0.112.1",
+]
+requires-python = ">=3.12"
+readme = "README.md"
+
+[project.scripts]
+app = "uvicorn app.main:app --reload"
