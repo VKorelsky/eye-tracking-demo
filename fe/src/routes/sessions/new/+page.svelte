@@ -20,9 +20,8 @@
 	let appState: AppState = $state('ready');
 
 	let exerciseStartTime: number = $state(0);
-	let timeRemaining: number = $state(10);
 
-	type RecordingSample = GazeData & { elapsedMs: number };
+	type RecordingSample = GazeData & { elapsedMs: number; valid: boolean };
 	let sessionData = $state<RecordingSample[]>([]);
 
 	// TODO -> move these into separate components
@@ -43,10 +42,6 @@
 	let canvas: HTMLCanvasElement;
 
 	let ctx: CanvasRenderingContext2D | null = null;
-
-	// Exercise state
-	let dotX: number = $state(10); // percentage of canvas width
-	let timerInterval: ReturnType<typeof setInterval>;
 
 	onMount(() => {
 		ctx = canvas.getContext('2d');
@@ -100,7 +95,7 @@
 
 	const gazeListenerCallback: GazeListener = (data, elapsedTimeMs) => {
 		if (data && appState === 'exercise') {
-			sessionData.push({ x: data.x, y: data.y, elapsedMs: elapsedTimeMs });
+			sessionData.push({ x: data.x, y: data.y, elapsedMs: elapsedTimeMs, valid: true });
 		}
 	};
 
@@ -150,18 +145,15 @@
 		}
 	}
 
-	function startTimer() {
-		timerInterval = setInterval(() => {
-			timeRemaining--;
-			if (timeRemaining <= 0) {
-				endExercise();
-			}
-		}, 1000);
+	function handleKeydown(event: KeyboardEvent) {
+		if (event.code === 'Space' && appState === 'exercise') {
+			event.preventDefault();
+			endExercise();
+		}
 	}
 
 	function endExercise() {
 		appState = 'completed';
-		clearInterval(timerInterval);
 		webgazer.end();
 		console.log('Session completed. Normalized gaze data:', sessionData);
 	}
@@ -169,13 +161,21 @@
 	function startExercise() {
 		appState = 'exercise';
 		exerciseStartTime = performance.now();
+
+		webgazer.params.moveTickSize = 10;
+		webgazer.params.dataTimestep = 10;
+		webgazer.params.applyKalmanFilter = true;
+		webgazer.params.showFaceOverlay = false;
+		webgazer.params.showFaceFeedbackBox = false;
+
+		webgazer.showPredictionPoints(true);
+		webgazer.showVideo(false);
+
 		webgazer.removeMouseEventListeners().setGazeListener(gazeListenerCallback);
-		startTimer();
 	}
 
 	function resetSession() {
 		appState = 'ready';
-		timeRemaining = 45;
 		sessionData.length = 0;
 		calibrationPoints.forEach((point) => {
 			point.clicks = 0;
@@ -184,6 +184,8 @@
 		webgazer.end();
 	}
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="flex min-h-screen w-full flex-col pt-10">
 	<div class="m-8 text-center">
@@ -196,9 +198,7 @@
 	<div class="m-8 flex flex-1 flex-col items-center justify-center">
 		<div class="flex flex-col items-center space-y-8">
 			{#if appState === 'exercise'}
-				<div class="text-2xl font-bold text-blue-600">
-					Time Remaining: {timeRemaining}s
-				</div>
+				<div class="text-2xl font-bold text-blue-600">Recording... Press SPACEBAR to stop</div>
 			{/if}
 
 			{#if appState === 'calibration'}
@@ -224,9 +224,8 @@
 				</button>
 			{:else if appState === 'completed'}
 				<div class="space-y-4 text-center">
-					<div class="text-xl font-bold text-green-600">Session Completed!</div>
-					<div class="text-gray-600">
-						Collected {sessionData.length} gaze points over {10} seconds
+					<div class="text-xl font-bold text-green-600">
+						Session Completed! Collected {sessionData.length} samples
 					</div>
 					<button
 						onclick={resetSession}
