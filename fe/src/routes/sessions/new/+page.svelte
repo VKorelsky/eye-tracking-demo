@@ -7,9 +7,9 @@
 	let sessionId: string = $state('');
 
 	let exerciseStartTime: number = $state(0);
-	let timeRemaining: number = $state(20);
+	let timeRemaining: number = $state(30);
 
-	type GazeDataPoint = GazeData & { sample_time: number };
+	type GazeDataPoint = { pos: number; sample_time: number };
 	let sessionData = $state<GazeDataPoint[]>([]);
 
 	// TODO -> move these into separate components
@@ -38,7 +38,7 @@
 
 	onMount(() => {
 		sessionId = crypto.randomUUID();
-	
+
 		ctx = canvas.getContext('2d');
 		// smooth predictions
 		webgazer.applyKalmanFilter(true);
@@ -49,7 +49,7 @@
 		if (!ctx) return;
 
 		// Clear canvas
-		ctx.clearRect(0, 0, canvas.width, canvas.height);
+		ctx!.clearRect(0, 0, canvas.width, canvas.height);
 
 		if (appState === 'calibration') {
 			drawCalibrationPoints();
@@ -67,27 +67,27 @@
 			const x = (point.x / 100) * canvas.width;
 			const y = (point.y / 100) * canvas.height;
 
-			ctx.beginPath();
-			ctx.arc(x, y, 20, 0, 2 * Math.PI);
+			ctx!.beginPath();
+			ctx!.arc(x, y, 20, 0, 2 * Math.PI);
 
 			if (point.completed) {
-				ctx.fillStyle = '#10B981'; // Green
+				ctx!.fillStyle = '#10B981'; // Green
 			} else if (point.clicks >= 1) {
-				ctx.fillStyle = '#F59E0B'; // Yellow
+				ctx!.fillStyle = '#F59E0B'; // Yellow
 			} else {
-				ctx.fillStyle = '#EF4444'; // Red
+				ctx!.fillStyle = '#EF4444'; // Red
 			}
 
-			ctx.fill();
-			ctx.strokeStyle = '#374151';
-			ctx.lineWidth = 2;
-			ctx.stroke();
+			ctx!.fill();
+			ctx!.strokeStyle = '#374151';
+			ctx!.lineWidth = 2;
+			ctx!.stroke();
 
 			// Draw click count
-			ctx.fillStyle = '#FFFFFF';
-			ctx.font = '14px monospace';
-			ctx.textAlign = 'center';
-			ctx.fillText(`${point.clicks}/3`, x, y + 5);
+			ctx!.fillStyle = '#FFFFFF';
+			ctx!.font = '14px monospace';
+			ctx!.textAlign = 'center';
+			ctx!.fillText(`${point.clicks}/2`, x, y + 5);
 		});
 	}
 
@@ -97,17 +97,23 @@
 		const x = (dotX / 100) * canvas.width;
 		const y = canvas.height / 2;
 
-		ctx.beginPath();
-		ctx.arc(x, y, 15, 0, 2 * Math.PI);
-		ctx.fillStyle = '#3B82F6'; // Blue
-		ctx.fill();
-		ctx.strokeStyle = '#1E40AF';
-		ctx.lineWidth = 3;
-		ctx.stroke();
+		ctx!.beginPath();
+		ctx!.arc(x, y, 15, 0, 2 * Math.PI);
+		ctx!.fillStyle = '#3B82F6'; // Blue
+		ctx!.fill();
+		ctx!.strokeStyle = '#1E40AF';
+		ctx!.lineWidth = 3;
+		ctx!.stroke();
 	}
 
-	const normalize = (data: GazeData): GazeData => {
-		return data;
+	const normalize = (
+		gazeX: number,
+		canvasLeft: number,
+		canvasWidth: number
+	): number => {
+		const canvasRelativeX = gazeX - canvasLeft;
+		const normalizedPos = (canvasRelativeX / canvasWidth) * 2 - 1;
+		return Math.max(-1, Math.min(1, normalizedPos));
 	};
 
 	const gazeListenerCallback: GazeListener = (data, elapsedTimeMs) => {
@@ -115,10 +121,11 @@
 			return;
 		}
 
-		const sample_coordinates = normalize(data);
+		const rect = canvas.getBoundingClientRect();
+		const pos = normalize(data.x, rect.left, canvas.offsetWidth);
 		const sample_time = exerciseStartTime + elapsedTimeMs;
 
-		const sample: GazeDataPoint = { ...sample_coordinates, sample_time };
+		const sample: GazeDataPoint = { pos, sample_time };
 		sessionData.push(sample);
 	};
 
@@ -150,7 +157,7 @@
 				webgazer.recordScreenPosition(event.clientX, event.clientY, 'click');
 
 				point.clicks++;
-				if (point.clicks >= 3) {
+				if (point.clicks >= 2) {
 					point.completed = true;
 				}
 				calibrationPoints[i] = point;
@@ -207,7 +214,7 @@
 		clearInterval(timerInterval);
 		cancelAnimationFrame(animationId);
 		webgazer.end();
-		console.log('Session completed. Data:', sessionData);
+		console.log('Session completed. Normalized gaze data:', sessionData);
 	}
 
 	function resetSession() {
