@@ -23,7 +23,7 @@ def upgrade() -> None:
         CREATE TABLE session (
             id UUID NOT NULL,
             user_agent VARCHAR(1024) NOT NULL,
-            sample_rate INTEGER NOT NULL,
+            sample_rate NUMERIC(10,2) NOT NULL,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             duration DOUBLE PRECISION NOT NULL,
             PRIMARY KEY (id)
