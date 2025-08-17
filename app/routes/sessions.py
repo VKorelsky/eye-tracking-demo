@@ -20,11 +20,12 @@ async def create_session(db_session: DBSessionDep, data: SessionCreate, user_age
         session_id = uuid.uuid4()
         device_info = "Unknown" if user_agent is None else user_agent
         session_duration = round(data.duration, 3)
+        rounded_sample_rate = round(data.sample_rate, 2)
 
         session = Session(
             id=session_id,
             user_agent=device_info,
-            sample_rate=data.sample_rate,
+            sample_rate=rounded_sample_rate,
             duration=session_duration,
             created_at=created_at,
         )
