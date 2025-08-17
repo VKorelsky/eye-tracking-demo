@@ -48,3 +48,7 @@ uv run fastapi dev
 7. Done
 
 If you make any changes to the frontend, run the npm build again for the changes to be reflected in the frontend
+
+# API docs
+
+Available under the endpoint `/docs`
