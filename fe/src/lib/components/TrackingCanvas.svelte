@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import webgazer, { type GazeListener } from 'webgazer';
 	import type {
 		RecordingSessionState,
@@ -17,6 +17,7 @@
 
 	let isRecording = $state(false);
 	let sessionData = $state<RecordingSample[]>([]);
+	let error = $state<string | null>(null);
 
 	let recordingSessionStartTime: number = $state(performance.now());
 	// There may be pauses along the way, and we need to take them into account as we compute the effective sampling rate
@@ -53,16 +54,30 @@
 		{ x: 75, y: 50, clicks: 0, completed: false }
 	]);
 
-	onMount(() => {
+	onMount(async () => {
 		if (!canvas) return;
 		ctx = canvas.getContext('2d');
 		drawCanvas();
+
+		// Request camera permission at the start
+		try {
+			await navigator.mediaDevices.getUserMedia({ video: true });
+			const permissions = await navigator.permissions.query({ name: 'camera' as PermissionName });
+			if (permissions.state === 'denied') {
+				error = 'Camera access denied. Please allow camera access to use eye tracking.';
+				return;
+			}
+		} catch (e) {
+			error = 'Camera access denied. Please allow camera access to use eye tracking.';
+			console.error(error);
+			return;
+		}
 	});
 
 	function drawCanvas() {
 		if (!ctx || !canvas) return;
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
-		if (recordingState === 'calibration') {
+		if (recordingState === 'calibration' && webgazer.isReady()) {
 			drawCalibrationPoints();
 		}
 		requestAnimationFrame(drawCanvas);
@@ -131,7 +146,7 @@
 	function startRecording() {
 		recordingState = 'recording';
 		isRecording = true;
-		
+
 		recordingSessionStartTime = performance.now();
 		lastRecordingStartTime = recordingSessionStartTime;
 
@@ -205,6 +220,12 @@
 
 		recordingState = 'completed';
 	}
+
+	onDestroy(() => {
+		if (recordingState !== 'ready' && recordingState !== 'completed') {
+			webgazer.end();
+		}
+	});
 </script>
 
 <svelte:window
@@ -239,7 +260,9 @@
 		class="h-auto max-w-full cursor-pointer rounded-3xl border-2 border-gray-300 bg-white shadow-lg"
 	></canvas>
 
-	{#if recordingState === 'ready'}
+	{#if error}
+		<div class="mt-2 text-sm text-red-600">{error}</div>
+	{:else if recordingState === 'ready'}
 		<button
 			onclick={startCalibration}
 			class="rounded-lg bg-blue-500 px-6 py-3 font-medium text-white transition-colors hover:bg-blue-600"
