@@ -15,6 +15,7 @@ vite.config.ts.timestamp-*
 __pycache__
 .venv
 dist/
+.ruff_cache/
 
 # common
 .DS_Store

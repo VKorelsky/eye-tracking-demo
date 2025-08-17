@@ -1,18 +1,18 @@
-from fastapi import APIRouter, HTTPException, Header, Response
-from typing import Annotated, Any
+from fastapi import APIRouter, HTTPException, Header, Query
+from typing import Annotated
 import uuid
 import datetime
 
-from app.deps import SessionDep
-from app.models import Session, Sample, SessionCreate
+from sqlmodel import select
+
+from app.deps import DBSessionDep
+from app.models import Session, Sample, SessionCreate, SessionCreateResponse, SessionRead
 
 router = APIRouter(tags=["sessions"])
 
 
-@router.post("/sessions", status_code=201)
-async def create_session(
-    db_session: SessionDep, data: SessionCreate, user_agent: Annotated[str | None, Header()]
-) -> dict[str, Any]:
+@router.post("/sessions", status_code=201, response_model=SessionCreateResponse)
+async def create_session(db_session: DBSessionDep, data: SessionCreate, user_agent: Annotated[str | None, Header()]):
     try:
         created_at = data.recorded_at or datetime.datetime.now(datetime.timezone.utc)
 
@@ -39,17 +39,18 @@ async def create_session(
 
         db_session.add_all(samples)
         db_session.commit()
-        
-        return Response(status_code=201)
+
+        return SessionCreateResponse(id=session.id)
     except Exception as e:
         db_session.rollback()
         print(f"Error creating session: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create session")
 
 
-@router.get("/sessions")
-async def list_sessions():
-    return "list of all the sessions"
+@router.get("/sessions", response_model=list[SessionRead])
+async def list_sessions(db_session: DBSessionDep, offset: int = 0, limit: Annotated[int, Query(le=150)] = 150):
+    sessions = db_session.exec(select(Session).order_by(Session.created_at.desc()).offset(offset).limit(limit)).all()
+    return sessions
 
 
 @router.get("/sessions/{session_id}")

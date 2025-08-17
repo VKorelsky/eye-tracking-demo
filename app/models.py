@@ -1,18 +1,16 @@
 import datetime
 import uuid
 from typing import List
+from pydantic import BaseModel
 from sqlmodel import Field, Relationship, SQLModel
 
 
-class SessionBase(SQLModel):
+class Session(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_agent: str = Field(max_length=1024)
     accuracy: int = Field(ge=0, le=100)
     sample_rate: int = Field()
     created_at: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc))
-
-
-class Session(SessionBase, table=True):
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     samples: list["Sample"] = Relationship(back_populates="session")
 
 
@@ -28,8 +26,20 @@ class Sample(SampleBase, table=True):
 
 
 # request/response schemas
-class SessionCreate(SQLModel):
+class SessionCreate(BaseModel):
     accuracy: int = Field(ge=0, le=100)
     sample_rate: int = Field()
     recorded_at: datetime.datetime | None = None
     samples: List[SampleBase]
+
+
+class SessionCreateResponse(BaseModel):
+    id: uuid.UUID
+
+
+class SessionRead(BaseModel):
+    id: uuid.UUID
+    user_agent: str
+    accuracy: int
+    sample_rate: int
+    created_at: datetime.datetime
