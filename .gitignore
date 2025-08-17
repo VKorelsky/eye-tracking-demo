@@ -6,7 +6,7 @@ node_modules
 .netlify
 .wrangler
 .svelte-kit
-/build
+fe/build/
 
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*

@@ -1,23 +1,18 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import webgazer, { type GazeData, type GazeListener } from 'webgazer';
 
-	// const normalize = (gazeX: number, canvasLeft: number, canvasWidth: number): number => {
-	// 	const canvasRelativeX = gazeX - canvasLeft;
-	// 	const normalizedPos = (canvasRelativeX / canvasWidth) * 2 - 1;
-	// 	return Math.max(-1, Math.min(1, normalizedPos));
-	// };
+	// todo move into library method
+	const normalize = (gazeX: number, canvasLeft: number, canvasWidth: number): number => {
+		const canvasRelativeX = gazeX - canvasLeft;
+		const normalizedPos = (canvasRelativeX / canvasWidth) * 2 - 1;
+		return Math.max(-1, Math.min(1, normalizedPos));
+	};
 
-	// do this processing prior to uploading to server
-	// const rect = canvas.getBoundingClientRect();
-	// const pos = normalize(data.x, rect.left, canvas.offsetWidth);
-	// const sample_time = exerciseStartTime + elapsedTimeMs;
-
-	// const sample: GazeDataPoint = { pos, sample_time };
-	// sessionData.push(sample);
-
-	type AppState = 'ready' | 'calibration' | 'exercise' | 'completed';
+	type AppState = 'ready' | 'calibration' | 'recording' | 'paused' | 'saving' | 'completed';
 	let appState: AppState = $state('ready');
+	let isRecording = $state(false);
 
 	let exerciseStartTime: number = $state(0);
 
@@ -93,12 +88,6 @@
 		ctx!.fillText(`${activePoint.clicks}/5`, x, y + 5);
 	}
 
-	const gazeListenerCallback: GazeListener = (data, elapsedTimeMs) => {
-		if (data && appState === 'exercise') {
-			sessionData.push({ x: data.x, y: data.y, elapsedMs: elapsedTimeMs, valid: true });
-		}
-	};
-
 	function startCalibration() {
 		appState = 'calibration';
 
@@ -141,25 +130,27 @@
 
 		// Check if all points are calibrated
 		if (calibrationPoints.every((p) => p.completed)) {
-			startExercise();
+			startRecording();
 		}
 	}
+
+	// recording logic
+	const gazeListenerCallback: GazeListener = (data, elapsedTimeMs) => {
+		if (data && appState === 'recording' && isRecording) {
+			sessionData.push({ x: data.x, y: data.y, elapsedMs: elapsedTimeMs, valid: true });
+		}
+	};
 
 	function handleKeydown(event: KeyboardEvent) {
-		if (event.code === 'Space' && appState === 'exercise') {
+		if (event.code === 'Space' && (appState === 'recording' || appState === 'paused')) {
 			event.preventDefault();
-			endExercise();
+			toggleRecording();
 		}
 	}
 
-	function endExercise() {
-		appState = 'completed';
-		webgazer.end();
-		console.log('Session completed. Normalized gaze data:', sessionData);
-	}
-
-	function startExercise() {
-		appState = 'exercise';
+	function startRecording() {
+		appState = 'recording';
+		isRecording = true;
 		exerciseStartTime = performance.now();
 
 		webgazer.params.moveTickSize = 10;
@@ -174,8 +165,61 @@
 		webgazer.removeMouseEventListeners().setGazeListener(gazeListenerCallback);
 	}
 
+	function toggleRecording() {
+		if (appState === 'recording') {
+			appState = 'paused';
+			isRecording = false;
+			webgazer.pause()
+		} else if (appState === 'paused') {
+			appState = 'recording';
+			isRecording = true;
+			webgazer.resume();
+		}
+	}
+
+	async function persistSession() {
+		if (sessionData.length === 0) return;
+
+		appState = 'saving';
+
+		try {
+			const rect = canvas.getBoundingClientRect();
+			const samples = sessionData.map((sample) => ({
+				timestamp: new Date(exerciseStartTime + sample.elapsedMs).toISOString(),
+				pos: normalize(sample.x, rect.left, canvas.offsetWidth)
+			}));
+
+			// TODO sample rate
+			const sessionData_api = {
+				accuracy: 80,
+				sample_rate: 100,
+				samples: samples
+			};
+
+			const response = await fetch('/api/sessions', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(sessionData_api)
+			});
+
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+
+			const result = await response.json();
+			webgazer.end();
+			goto(`/sessions/${result.id}`);
+		} catch (error) {
+			console.error('Failed to save session:', error);
+			appState = 'recording';
+		}
+	}
+
 	function resetSession() {
 		appState = 'ready';
+		isRecording = false;
 		sessionData.length = 0;
 		calibrationPoints.forEach((point) => {
 			point.clicks = 0;
@@ -186,7 +230,6 @@
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
-
 <div class="flex min-h-screen w-full flex-col pt-10">
 	<div class="m-8 text-center">
 		<h1 class="text-2xl font-bold text-gray-900">New Session</h1>
@@ -197,8 +240,12 @@
 
 	<div class="m-8 flex flex-1 flex-col items-center justify-center">
 		<div class="flex flex-col items-center space-y-8">
-			{#if appState === 'exercise'}
+			{#if appState === 'recording'}
 				<div class="text-2xl font-bold text-blue-600">Recording... Press SPACEBAR to stop</div>
+			{:else if appState === 'paused'}
+				<div class="text-2xl font-bold text-orange-600">Recording Paused</div>
+			{:else if appState === 'saving'}
+				<div class="text-2xl font-bold text-green-600">Saving Session...</div>
 			{/if}
 
 			{#if appState === 'calibration'}
@@ -222,17 +269,31 @@
 				>
 					Start Session
 				</button>
-			{:else if appState === 'completed'}
-				<div class="space-y-4 text-center">
-					<div class="text-xl font-bold text-green-600">
-						Session Completed! Collected {sessionData.length} samples
-					</div>
+			{:else if appState === 'recording' || appState === 'paused'}
+				<div class="flex space-x-4">
 					<button
-						onclick={resetSession}
-						class="rounded-lg bg-gray-500 px-6 py-3 font-medium text-white transition-colors hover:bg-gray-600"
+						onclick={toggleRecording}
+						class="rounded-lg px-6 py-3 font-medium text-white transition-colors {appState ===
+						'recording'
+							? 'bg-orange-500 hover:bg-orange-600'
+							: 'bg-blue-500 hover:bg-blue-600'}"
 					>
-						Start New Session
+						{appState === 'recording' ? 'Pause Recording' : 'Resume Recording'}
 					</button>
+					<button
+						onclick={persistSession}
+						disabled={sessionData.length === 0}
+						class="rounded-lg bg-green-500 px-6 py-3 font-medium text-white transition-colors hover:bg-green-600 disabled:cursor-not-allowed disabled:bg-gray-400"
+					>
+						Save Session ({sessionData.length} samples)
+					</button>
+				</div>
+			{:else if appState === 'saving'}
+				<div class="flex items-center space-x-2">
+					<div
+						class="h-6 w-6 animate-spin rounded-full border-2 border-green-500 border-t-transparent"
+					></div>
+					<span class="text-lg font-medium text-green-600">Saving...</span>
 				</div>
 			{/if}
 		</div>

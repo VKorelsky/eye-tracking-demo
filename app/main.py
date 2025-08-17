@@ -19,7 +19,7 @@ app.add_middleware(
 # routes
 app.include_router(sessions.router, prefix="/api")
 
-# mount frontned
+# mount frontend
 frontend_build_dir = Path(__file__).parent.parent / "fe" / "build"
 assets_dir = frontend_build_dir / "_app"
 
