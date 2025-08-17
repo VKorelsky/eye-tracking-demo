@@ -2,11 +2,9 @@
 node_modules
 
 .output
-.vercel
 .netlify
 .wrangler
 .svelte-kit
-fe/build/
 
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
