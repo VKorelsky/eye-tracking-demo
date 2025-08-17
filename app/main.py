@@ -1,11 +1,7 @@
-import os
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
-from dotenv import load_dotenv
-
-from sqlmodel import create_engine
 
 from .routes import sessions
 
@@ -19,17 +15,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# database
-load_dotenv()
+# routes
+app.include_router(sessions.router, prefix="/api")
 
-db_url = "postgresql://{user}:{password}@{host}/{db}".format(
-    user=os.getenv("DB_USER", ""),
-    password=os.getenv("DB_PASS", ""),
-    host=os.getenv("DB_HOST", ""),
-    db=os.getenv("DB_NAME", ""),
-)
 
-db_engine = create_engine(str(db_url))
+@app.get("/")
+async def root():
+    return {"message": "Server is running!"}
+
 
 # mount compiled frontend
 prerendered_dir = Path(__file__).parent.parent / "fe" / ".svelte-kit" / "output" / "prerendered" / "pages"
@@ -40,11 +33,3 @@ if client_dir.exists():
 
 if prerendered_dir.exists():
     app.mount("/", StaticFiles(directory=prerendered_dir, html=True), name="pages")
-
-# routes
-app.include_router(sessions.router, prefix="/api")
-
-
-@app.get("/")
-async def root():
-    return {"message": "Server is running!"}
