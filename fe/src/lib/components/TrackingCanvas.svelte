@@ -191,6 +191,7 @@
 	function completeSession() {
 		if (!canvas) return;
 
+		sampleRates = [...sampleRates, computeSampleRateSinceLastPause()];
 		webgazer.end();
 
 		// normalize data
