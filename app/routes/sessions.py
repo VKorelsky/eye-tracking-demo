@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Header, Query
+from fastapi.responses import PlainTextResponse
 from typing import Annotated
 import uuid
 import datetime
@@ -64,3 +65,28 @@ async def get_session(db_session: DBSessionDep, session_id: uuid.UUID):
         raise HTTPException(status_code=404, detail="No session found")
 
     return session
+
+
+@router.get("/sessions/{session_id}/export")
+async def export_session_csv(db_session: DBSessionDep, session_id: uuid.UUID):
+    session = db_session.get(Session, session_id)
+
+    if not session:
+        raise HTTPException(status_code=404, detail="No session found")
+
+    # fetch samples in separate statement to specificy order
+    fetch_samples = select(Sample).where(Sample.session_id == session_id).order_by(Sample.timestamp.asc())
+
+    samples = db_session.exec(fetch_samples).all()
+
+    lines = ["timestamp,pos"]
+    for s in samples:
+        lines.append(f"{s.timestamp.isoformat()},{s.pos}")
+
+    csv_data = "\n".join(lines) + "\n"
+
+    return PlainTextResponse(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=session_{session_id}.csv"},
+    )

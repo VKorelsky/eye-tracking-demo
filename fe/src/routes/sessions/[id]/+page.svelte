@@ -92,7 +92,18 @@
 			</div>
 
 			<div class="mb-6 rounded-lg bg-white p-6 shadow-md">
-				<h2 class="mb-4 text-xl font-semibold">Eye Tracking Data</h2>
+				<div class="mb-4 flex items-center justify-between">
+					<h2 class="text-xl font-semibold">Eye Tracking Data</h2>
+					{#if samples.length > 0}
+						<a
+							href={`/api/sessions/${sessionId}/export`}
+							download={`session_${sessionId}.csv`}
+							class="rounded bg-gray-800 px-3 py-1 text-sm text-white transition-colors hover:bg-black"
+						>
+							Export data as CSV
+						</a>
+					{/if}
+				</div>
 				{#if samples.length > 0}
 					<TimeSeriesChart data={samples} />
 				{:else}
