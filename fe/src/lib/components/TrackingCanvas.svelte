@@ -16,15 +16,13 @@
 	let ctx: CanvasRenderingContext2D | null = null;
 
 	let isRecording = $state(false);
-	let recordingStartTime: number = $state(performance.now());
-
 	let sessionData = $state<RecordingSample[]>([]);
 
-	let calibrationPoints = $state<CalibrationPoint[]>([
-		{ x: 25, y: 50, clicks: 0, completed: false },
-		{ x: 50, y: 50, clicks: 0, completed: false },
-		{ x: 75, y: 50, clicks: 0, completed: false }
-	]);
+	let recordingSessionStartTime: number = $state(performance.now());
+	// There may be pauses along the way, and we need to take them into account as we compute the effective sampling rate
+	let lastRecordingStartTime: number = $state(performance.now());
+
+	let sampleRates = $state<number[]>([]);
 
 	const normalizeRecordingCoordinates = (
 		gazeX: number,
@@ -35,6 +33,25 @@
 		const normalizedPos = (canvasRelativeX / canvasWidth) * 2 - 1;
 		return Math.max(-1, Math.min(1, normalizedPos));
 	};
+
+	const computeSampleRateSinceLastPause = (): number => {
+		// Take each data point that was recorded since the last pause, and compute the sample rate of thoses
+		const startElapsedMs = Math.max(0, lastRecordingStartTime - recordingSessionStartTime);
+		const segmentSamples = sessionData.filter((s) => s.elapsedMs >= startElapsedMs);
+		if (segmentSamples.length === 0) return 0;
+
+		const lastElapsed = segmentSamples[segmentSamples.length - 1].elapsedMs;
+		const durationMs = lastElapsed - startElapsedMs;
+		if (durationMs <= 0) return 0;
+
+		return segmentSamples.length / (durationMs / 1000);
+	};
+
+	let calibrationPoints = $state<CalibrationPoint[]>([
+		{ x: 25, y: 50, clicks: 0, completed: false },
+		{ x: 50, y: 50, clicks: 0, completed: false },
+		{ x: 75, y: 50, clicks: 0, completed: false }
+	]);
 
 	onMount(() => {
 		if (!canvas) return;
@@ -114,7 +131,9 @@
 	function startRecording() {
 		recordingState = 'recording';
 		isRecording = true;
-		recordingStartTime = performance.now();
+		
+		recordingSessionStartTime = performance.now();
+		lastRecordingStartTime = recordingSessionStartTime;
 
 		// smooth predictions and set samples to be taken every 20ms (ideally)
 		webgazer.params.dataTimestep = 20;
@@ -135,10 +154,14 @@
 		if (recordingState === 'recording') {
 			recordingState = 'paused';
 			isRecording = false;
+			sampleRates = [...sampleRates, computeSampleRateSinceLastPause()];
+
 			webgazer.pause();
 		} else if (recordingState === 'paused') {
 			recordingState = 'recording';
 			isRecording = true;
+			lastRecordingStartTime = performance.now();
+
 			webgazer.resume();
 		}
 	}
@@ -157,21 +180,26 @@
 
 		// normalize data
 		const rect = canvas.getBoundingClientRect();
-		const recordingEndTime = performance.now();
-		const recordingStartDate = new Date(performance.timeOrigin + recordingStartTime).toISOString();
 
 		const samples = sessionData.map((sample) => ({
 			timestamp: new Date(
-				performance.timeOrigin + recordingStartTime + sample.elapsedMs
+				performance.timeOrigin + recordingSessionStartTime + sample.elapsedMs
 			).toISOString(),
 			pos: normalizeRecordingCoordinates(sample.x, rect.left, canvas!.offsetWidth)
 		}));
 
+		const recordingEndTime = performance.now();
+		const recordingStartDate = new Date(
+			performance.timeOrigin + recordingSessionStartTime
+		).toISOString();
+
+		const averageSampleRate = sampleRates.reduce((acc, rate) => acc + rate, 0) / sampleRates.length;
+
 		onend({
-			sample_rate: 100,
+			sample_rate: averageSampleRate,
 			recorded_at: recordingStartDate,
 			// record the duration in seconds
-			duration: (recordingEndTime - recordingStartTime) / 1000,
+			duration: (recordingEndTime - recordingSessionStartTime) / 1000,
 			samples
 		});
 

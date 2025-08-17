@@ -64,7 +64,7 @@
 							<div class="text-2xl font-bold text-gray-900">{samples.length}</div>
 						</div>
 						<div class="rounded-lg bg-gray-50 p-4">
-							<div class="text-sm text-gray-600">Session duration</div>
+							<div class="text-sm text-gray-600">Session duration (including pauses)</div>
 							<div class="text-2xl font-bold text-gray-900">
 								<!-- assumes seconds -->
 								{sessionData.duration}s
