@@ -37,9 +37,17 @@ class SessionCreateResponse(BaseModel):
     id: uuid.UUID
 
 
+class SampleRead(SampleBase):
+    pass
+
+
 class SessionRead(BaseModel):
     id: uuid.UUID
     user_agent: str
     accuracy: int
     sample_rate: int
     created_at: datetime.datetime
+
+
+class SessionReadWithSamples(SessionRead):
+    samples: list[SampleRead] = []

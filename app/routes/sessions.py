@@ -3,10 +3,11 @@ from typing import Annotated
 import uuid
 import datetime
 
+from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from app.deps import DBSessionDep
-from app.models import Session, Sample, SessionCreate, SessionCreateResponse, SessionRead
+from app.models import Session, Sample, SessionCreate, SessionCreateResponse, SessionRead, SessionReadWithSamples
 
 router = APIRouter(tags=["sessions"])
 
@@ -53,6 +54,11 @@ async def list_sessions(db_session: DBSessionDep, offset: int = 0, limit: Annota
     return sessions
 
 
-@router.get("/sessions/{session_id}")
-async def get_session(session_id: str):
-    return "some basic session data"
+@router.get("/sessions/{session_id}", response_model=SessionReadWithSamples)
+async def get_session(db_session: DBSessionDep, session_id: uuid.UUID):
+    session = db_session.get(Session, session_id)
+
+    if not session:
+        raise HTTPException(status_code=404, detail="No session found")
+
+    return session
