@@ -8,9 +8,9 @@ from sqlmodel import Field, Relationship, SQLModel
 class Session(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_agent: str = Field(max_length=1024)
-    accuracy: int = Field(ge=0, le=100)
     sample_rate: int = Field()
     created_at: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc))
+    duration: float = Field()
     samples: list["Sample"] = Relationship(back_populates="session")
 
 
@@ -27,9 +27,9 @@ class Sample(SampleBase, table=True):
 
 # request/response schemas
 class SessionCreate(BaseModel):
-    accuracy: int = Field(ge=0, le=100)
-    sample_rate: int = Field()
+    sample_rate: int
     recorded_at: datetime.datetime | None = None
+    duration: float
     samples: List[SampleBase]
 
 
@@ -44,7 +44,7 @@ class SampleRead(SampleBase):
 class SessionRead(BaseModel):
     id: uuid.UUID
     user_agent: str
-    accuracy: int
+    duration: float
     sample_rate: int
     created_at: datetime.datetime
 

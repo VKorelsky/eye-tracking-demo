@@ -3,7 +3,6 @@ from typing import Annotated
 import uuid
 import datetime
 
-from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from app.deps import DBSessionDep
@@ -19,12 +18,13 @@ async def create_session(db_session: DBSessionDep, data: SessionCreate, user_age
 
         session_id = uuid.uuid4()
         device_info = "Unknown" if user_agent is None else user_agent
+        session_duration = round(data.duration, 3)
 
         session = Session(
             id=session_id,
             user_agent=device_info,
-            accuracy=data.accuracy,
             sample_rate=data.sample_rate,
+            duration=session_duration,
             created_at=created_at,
         )
         db_session.add(session)
@@ -56,7 +56,9 @@ async def list_sessions(db_session: DBSessionDep, offset: int = 0, limit: Annota
 
 @router.get("/sessions/{session_id}", response_model=SessionReadWithSamples)
 async def get_session(db_session: DBSessionDep, session_id: uuid.UUID):
-    session = db_session.get(Session, session_id)
+    statement = select(Session).where(Session.id == session_id).join(Session.samples).order_by(Sample.timestamp.asc())
+
+    session = db_session.exec(statement).first()
 
     if not session:
         raise HTTPException(status_code=404, detail="No session found")
