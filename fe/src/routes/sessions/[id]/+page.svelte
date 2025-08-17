@@ -1,12 +1,15 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { page } from '$app/state';
+	import TimeSeriesChart from '$lib/components/TimeSeriesChart.svelte';
+	import type { RecordingSessionSample } from '$lib/types';
 
 	let sessionId = page.params.id;
-	
+
 	let sessionData: any = $state(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	let samples: RecordingSessionSample[] = $state([]);
 
 	onMount(async () => {
 		try {
@@ -15,6 +18,9 @@
 				throw new Error(`Failed to fetch session: ${response.status}`);
 			}
 			sessionData = await response.json();
+
+			const rawSamples: RecordingSessionSample[] = sessionData?.samples ?? [];
+			samples = rawSamples;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
@@ -24,45 +30,74 @@
 </script>
 
 <div class="min-h-screen bg-gray-50 p-8">
-	<div class="mx-auto max-w-4xl">
-		<h1 class="mb-6 text-3xl font-bold text-gray-900">Session Details</h1>
+	<div class="mx-auto max-w-6xl">
+		<div class="mb-6 flex items-center gap-4">
+			<a href="/sessions" class="flex items-center gap-2 text-blue-600 hover:text-blue-800">
+				<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M15 19l-7-7 7-7"
+					/>
+				</svg>
+				Back to Sessions
+			</a>
+		</div>
+		<h1 class="mb-8 text-3xl font-bold text-gray-900">Session {sessionId}</h1>
 
 		{#if loading}
-			<div class="flex items-center justify-center p-8">
-				<div
-					class="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"
-				></div>
-				<span class="ml-2 text-lg text-gray-600">Loading session...</span>
-			</div>
+			<p class="text-gray-600">Loading session data...</p>
 		{:else if error}
-			<div class="rounded-lg bg-red-50 p-8">
-				<p class="text-red-600">Error: {error}</p>
-				<a href="/sessions" class="mt-4 inline-block text-blue-600 hover:underline"
-					>← Back to Sessions</a
-				>
-			</div>
+			<p class="text-red-600">Error: {error}</p>
 		{:else if sessionData}
-			<div class="space-y-6">
-				<div class="rounded-lg bg-white p-6 shadow">
-					<h2 class="mb-4 text-xl font-semibold text-gray-900">Session Information</h2>
-					<div class="grid grid-cols-2 gap-4 text-sm">
-						<div>
-							<strong>Session ID:</strong> <span class="font-mono text-blue-600">{sessionId}</span>
+			<div class="mb-6 rounded-lg bg-white p-6 shadow-md">
+				<h2 class="mb-4 text-xl font-semibold">Session Summary</h2>
+				<div class="mb-6 space-y-4">
+					<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+						<div class="rounded-lg bg-gray-50 p-4">
+							<div class="text-sm text-gray-600">Sample Rate</div>
+							<div class="text-2xl font-bold text-gray-900">{sessionData.sample_rate} Hz</div>
 						</div>
-						<div><strong>Created:</strong> {new Date(sessionData.created_at).toLocaleString()}</div>
-						<div><strong>Accuracy:</strong> {sessionData.accuracy}%</div>
-						<div><strong>Sample Rate:</strong> {sessionData.sample_rate} Hz</div>
-						<div class="col-span-2"><strong>User Agent:</strong> {sessionData.user_agent}</div>
+						<div class="rounded-lg bg-gray-50 p-4">
+							<div class="text-sm text-gray-600">Total Samples</div>
+							<div class="text-2xl font-bold text-gray-900">{samples.length}</div>
+						</div>
+						<div class="rounded-lg bg-gray-50 p-4">
+							<div class="text-sm text-gray-600">Session duration</div>
+							<div class="text-2xl font-bold text-gray-900">
+								<!-- assumes seconds -->
+								{sessionData.duration}s
+							</div>
+						</div>
+					</div>
+					<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+						<div class="rounded-lg bg-gray-50 p-4">
+							<div class="text-sm text-gray-600">Recorded At</div>
+							<div class="text-sm font-medium text-gray-900">
+								{new Date(sessionData.created_at).toLocaleString()}
+							</div>
+						</div>
+						<div class="rounded-lg bg-gray-50 p-4">
+							<div class="text-sm text-gray-600">User Agent</div>
+							<div
+								class="truncate text-sm font-medium text-gray-900"
+								title={sessionData.user_agent}
+							>
+								{sessionData.user_agent}
+							</div>
+						</div>
 					</div>
 				</div>
+			</div>
 
-				<div class="rounded-lg bg-white p-6 shadow">
-					<h2 class="mb-4 text-xl font-semibold text-gray-900">Recording Summary</h2>
-					<p class="text-gray-600">Session successfully saved with all eye tracking data.</p>
-				</div>
-
-				<a href="/sessions" class="inline-block text-blue-600 hover:underline">← Back to Sessions</a
-				>
+			<div class="mb-6 rounded-lg bg-white p-6 shadow-md">
+				<h2 class="mb-4 text-xl font-semibold">Eye Tracking Data</h2>
+				{#if samples.length > 0}
+					<TimeSeriesChart data={samples} />
+				{:else}
+					<p class="text-gray-600">No tracking data available for this session.</p>
+				{/if}
 			</div>
 		{/if}
 	</div>

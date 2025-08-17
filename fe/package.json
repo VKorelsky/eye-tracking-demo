@@ -36,6 +36,7 @@
 		"vite": "^7.0.4"
 	},
 	"dependencies": {
+		"uplot": "^1.6.32",
 		"webgazer": "^3.4.0"
 	}
 }
