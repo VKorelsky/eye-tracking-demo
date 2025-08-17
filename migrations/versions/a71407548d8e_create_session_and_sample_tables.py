@@ -23,9 +23,9 @@ def upgrade() -> None:
         CREATE TABLE session (
             id UUID NOT NULL,
             user_agent VARCHAR(1024) NOT NULL,
-            accuracy SMALLINT NOT NULL CHECK (accuracy BETWEEN 0 AND 100),
             sample_rate INTEGER NOT NULL,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+            duration DOUBLE PRECISION NOT NULL,
             PRIMARY KEY (id)
         )
     """
@@ -43,10 +43,11 @@ def upgrade() -> None:
     """
     )
 
+    # create an index on fetching samples by increasing time (older = first)
     op.execute(
         """
         CREATE INDEX idx_samples_session_time_desc
-        ON sample (session_id, timestamp DESC)
+        ON sample (session_id, timestamp ASC)
     """
     )
 
